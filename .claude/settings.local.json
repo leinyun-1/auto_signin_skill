@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(tasklist)",
+      "Bash(curl -s http://localhost:9222/json/version)"
+    ]
+  }
+}
