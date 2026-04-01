@@ -13,7 +13,7 @@ metadata:
 
 # Auto Sign Skill
 
-网页自动登录工具集。所有 tool 命令加 `--no-analyze` 参数，执行操作后返回截图文件路径，由你自行读取截图分析页面。
+网页自动登录工具集。所有 tool 命令加 `--no-analyze` 参数，执行操作后返回截图文件路径，由你自行读取截图分析页面。识别成功登录后结束(询问用户是否关闭浏览器)。
 ！执行工具时，必须进入到本skill的项目根目录内！
 **环境要求：** Python 3.8+
 
@@ -64,11 +64,11 @@ python scripts/stop_browser.py # 询问user是否关闭
 
 所有命令必须加 `--no-analyze`。
 
-| Tool | 命令 | 参数 | 前置条件 |
-|------|------|------|---------|
-| open_webpage | `python scripts/open_webpage.py --url <URL> --no-analyze` | `--url` (必填) | 浏览器已启动 |
-| click | `python scripts/click.py --x <X> --y <Y> --no-analyze` | `--x` (必填), `--y` (必填)。归一化坐标(0~1) | 浏览器已启动，已有页面打开 |
-| type_text | `python scripts/type_text.py --text <TEXT> --no-analyze` | `--text` (必填) | 必须先用 click 点击目标账号/密码输入框获取焦点 |
+| Tool | 命令 | 参数 | 前置条件 | 工具说明 |
+|------|------|------|---------|---------|
+| open_webpage | `python scripts/open_webpage.py --url <URL> --no-analyze` | `--url` (必填) | 浏览器已启动 | 如果打开目标网址发现已是登录状态，则任务直接结束。
+| click | `python scripts/click.py --x <X> --y <Y> --no-analyze` | `--x` (必填), `--y` (必填)。归一化坐标(0~1) | 浏览器已启动，已有页面打开 | 若点击后页面状态未改变，则反思坐标的精准度
+| type_text | `python scripts/type_text.py --text <TEXT> --no-analyze` | `--text` (必填) | 必须先用 click 点击目标账号/密码输入框获取焦点 | 若输入后页面内未增加输入字符，说明未聚焦
 
 **调用顺序：**
 
@@ -82,7 +82,7 @@ type_text.py 前必须先 click.py 点击输入框获取焦点。
 ---
 
 ## stdout 输出格式
-
+调用任一tool后会返回stdout结果
 ```
 操作: <操作描述>
 
@@ -97,6 +97,7 @@ URL: <当前页面URL>
 - 截图路径：匹配 `截图: ` 开头的行，取其后的完整路径
 - URL：匹配 `URL: ` 开头的行，取其后的完整 URL
 - 用文件读取工具读取截图路径指向的 PNG 图片，自行分析页面内容
+- 严禁使用 list_dir 或类似手段在 screenshots/ 目录下寻找截图。必须且仅能 使用当前工具调用返回的 stdout 中的“截图: ”路径。
 
 ---
 
@@ -131,6 +132,9 @@ URL: <当前页面URL>
 
 坐标为元素中心相对于图片宽高的比例，将直接用于点击操作。
 ```
+坐标校验： 若点击后截图显示的页面状态（Page State）与预期完全不符，Agent 应立即停止操作并重新分析截图，而不是盲目继续下一步。
+
+
 
 ### 登录成功判断
 
@@ -180,7 +184,7 @@ open_webpage → login_entry → third_party_select → login_form → login_suc
 
 | 条件 | 判断方式 | 处理 |
 |------|---------|------|
-| 登录成功 | 满足≥2个登录成功特征 | 报告成功 |
+| 登录成功 | 满足≥1个登录成功特征 | 报告成功 |
 | 验证码拦截 | 页面状态为 `captcha` | 通知用户手动完成 |
 | 页面错误 | `error_page` 且重试 2 次仍失败 | 报告错误 |
 | 状态无法推进 | 连续 3 步状态未变化 | 报告卡住，请求指导 |
@@ -199,6 +203,11 @@ open_webpage → login_entry → third_party_select → login_form → login_suc
 | 配置缺失 | `错误: 配置文件不存在` | 创建 config.json |
 
 ---
+
+
+## 交互规范
+1. 需要账号密码时，询问用户。
+2. 登录成功后，详细描述登录成功的依据，清理截图，然后结束本次任务。
 
 ## 完整工作流示例
 
@@ -226,6 +235,8 @@ $ python scripts/type_text.py --text "mypassword" --no-analyze
 步骤 6: 点击登录按钮
 $ python scripts/click.py --x 0.66 --y 0.52 --no-analyze
 → 读取截图，URL 已变化 + 登录表单消失 → 登录成功，任务完成
+
+步骤 7：清理登录过程中暂存的截图，结束任务。
 ```
 
 ---
