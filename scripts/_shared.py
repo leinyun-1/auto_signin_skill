@@ -63,15 +63,10 @@ async def connect_browser():
         page = await context.new_page()
 
     async def disconnect():
-        """仅断开 CDP 连接，不关闭浏览器"""
-        try:
-            await browser.close()
-        except Exception:
-            pass
-        try:
-            await pw.stop()
-        except Exception:
-            pass
+        """强制退出进程，阻止 Playwright driver 清理时关闭浏览器。"""
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)
 
     return disconnect, page
 
@@ -104,7 +99,14 @@ async def screenshot_and_analyze(page, step_hint: int = 0, no_analyze: bool = Fa
     current_url = page.url
 
     if no_analyze:
-        return f"截图: {screenshot_path}\nURL: {current_url}"
+        return (
+            f"截图: {screenshot_path}\n"
+            f"URL: {current_url}\n"
+            f"\n"
+            f"[分析指令] 读取上述截图，识别所有可交互元素，输出归一化坐标(0~1)的JSON：\n"
+            f'{{"page_type": "类型", "elements": [{{"type": "button/input/link", "text": "文字", "x": 0.5, "y": 0.59}}]}}\n'
+            f"x=元素中心/图片宽度, y=元素中心/图片高度。坐标将直接传给 click.py --x --y。"
+        )
 
     from llm_client import LLMClient
     from vision_analyzer import VisionAnalyzer

@@ -1,0 +1,68 @@
+{
+  "_说明": "VLM 提供商预置模板。Agent 根据用户选择，将对应模板复制到 config.json 的 llm 字段，并替换 <your-api-key>。",
+  "templates": {
+    "kimi": {
+      "provider": "kimi",
+      "api_key": "<your-api-key>",
+      "api_base": "https://api.moonshot.cn/v1",
+      "model": "kimi-k2.5",
+      "temperature": 0.6,
+      "max_tokens": 8192,
+      "thinking": false,
+      "min_request_interval": 4,
+      "_备注": "月之暗面 Kimi，中文优化，temperature 固定 0.6"
+    },
+    "openai": {
+      "provider": "openai",
+      "api_key": "<your-api-key>",
+      "api_base": "https://api.openai.com/v1",
+      "model": "gpt-4o",
+      "temperature": 0.7,
+      "max_tokens": 4096,
+      "thinking": false,
+      "min_request_interval": 0,
+      "_备注": "OpenAI GPT-4o，多语言，速度快，需海外网络"
+    },
+    "qwen": {
+      "provider": "qwen",
+      "api_key": "<your-api-key>",
+      "api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "model": "qwen-vl-max",
+      "temperature": 0.7,
+      "max_tokens": 4096,
+      "thinking": false,
+      "min_request_interval": 2,
+      "_备注": "阿里云通义千问 VL，国内访问快，视觉能力强"
+    },
+    "deepseek": {
+      "provider": "deepseek",
+      "api_key": "<your-api-key>",
+      "api_base": "https://api.deepseek.com/v1",
+      "model": "deepseek-chat",
+      "temperature": 0.7,
+      "max_tokens": 4096,
+      "thinking": false,
+      "min_request_interval": 0,
+      "_备注": "DeepSeek，性价比高，国内可直连"
+    },
+    "zhipu": {
+      "provider": "zhipu",
+      "api_key": "<your-api-key>",
+      "api_base": "https://open.bigmodel.cn/api/paas/v4",
+      "model": "glm-4v-flash",
+      "temperature": 0.7,
+      "max_tokens": 4096,
+      "thinking": false,
+      "min_request_interval": 1,
+      "_备注": "智谱 GLM-4V，免费额度大，国内可直连"
+    }
+  },
+  "browser_default": {
+    "channel": "msedge",
+    "headless": false,
+    "viewport_width": 1280,
+    "viewport_height": 800,
+    "default_timeout": 30000,
+    "screenshot_dir": "./screenshots"
+  }
+}

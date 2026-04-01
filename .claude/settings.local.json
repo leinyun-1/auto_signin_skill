@@ -3,7 +3,28 @@
     "allow": [
       "Bash(python:*)",
       "Bash(tasklist)",
-      "Bash(curl -s http://localhost:9222/json/version)"
+      "Bash(curl -s http://localhost:9222/json/version)",
+      "Bash(echo \"EXIT_CODE=$?\")",
+      "Bash(taskkill /F /IM msedge.exe)",
+      "Bash(taskkill /F /IM msedge.exe /T)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill /F /PID 18632)",
+      "Bash(taskkill /F /PID 43372)",
+      "Bash(cmd //c \"taskkill /F /PID 18632\")",
+      "Bash(cmd //c \"taskkill /F /PID 43372\")",
+      "Bash(cmd //c \"taskkill /F /IM msedge.exe /T\")",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(curl -s \"https://api.github.com/repos/openclaw/openclaw/contents/src/agents/tools/common.ts?ref=main\")",
+      "Bash(curl -s -H \"Accept: application/vnd.github.v3+json\" \"https://api.github.com/repos/openclaw/openclaw/contents/src/agents/tools/common.ts?ref=main\")",
+      "Bash(curl -s -H \"Accept: application/vnd.github.v3.raw\" \"https://api.github.com/repos/openclaw/openclaw/contents/src/agents/tools/common.ts?ref=main\")",
+      "Bash(curl:*)",
+      "WebFetch(domain:juejin.cn)",
+      "WebFetch(domain:blog.csdn.net)",
+      "Bash(gh search:*)",
+      "WebFetch(domain:www.qcloud.com)",
+      "WebFetch(domain:cloud.tencent.com)"
     ]
   }
 }

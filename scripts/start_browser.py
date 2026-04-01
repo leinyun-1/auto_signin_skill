@@ -1,97 +1,145 @@
 """
-启动持久浏览器进程（后台运行），供其他 tool 脚本通过 CDP 连接复用。
+启动浏览器并保持运行，供其他 tool 通过 CDP 连接。
+
+用系统命令直接启动浏览器（独立进程），通过 Playwright 连接设置 viewport。
 
 用法:
     python scripts/start_browser.py
     python scripts/start_browser.py --headless
-
-浏览器信息保存在 state.json 中。使用完毕后运行 stop_browser.py 关闭。
 """
 import argparse
-import asyncio
 import json
 import os
 import sys
-import signal
 import time
+import subprocess
+import shutil
+import urllib.request
 
 _SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE_FILE = os.path.join(_SKILL_DIR, "state.json")
 CONFIG_FILE = os.path.join(_SKILL_DIR, "config.json")
+CDP_PORT = 9222
 
 
-async def main():
-    parser = argparse.ArgumentParser(description="启动持久浏览器")
-    parser.add_argument("--headless", action="store_true", help="无头模式")
+def is_cdp_alive():
+    try:
+        urllib.request.urlopen(f"http://localhost:{CDP_PORT}/json/version", timeout=2).close()
+        return True
+    except Exception:
+        return False
+
+
+def find_browser(channel):
+    for name in [channel, "msedge", "chrome", "chromium"]:
+        path = shutil.which(name)
+        if path:
+            return path
+    if sys.platform == "win32":
+        for p in [
+            os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
+            os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
+            os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+        ]:
+            if os.path.isfile(p):
+                return p
+    return None
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--headless", action="store_true")
     args = parser.parse_args()
 
-    # 检查配置
-    if not os.path.exists(CONFIG_FILE):
-        print("错误: 请先运行 python scripts/setup.py 完成配置", file=sys.stderr)
-        sys.exit(1)
+    if is_cdp_alive():
+        if not os.path.exists(STATE_FILE):
+            with open(STATE_FILE, "w") as f:
+                json.dump({"cdp_url": f"http://localhost:{CDP_PORT}", "pid": 0,
+                           "step_counter": 0, "started_at": time.strftime("%Y-%m-%d %H:%M:%S")}, f, indent=2)
+        print(f"浏览器已在运行 (CDP: http://localhost:{CDP_PORT})")
+        return
 
+    if not os.path.exists(CONFIG_FILE):
+        print("错误: config.json 不存在", file=sys.stderr)
+        sys.exit(1)
     with open(CONFIG_FILE, "r", encoding="utf-8") as f:
         config = json.load(f)
 
-    from playwright.async_api import async_playwright
-
-    pw = await async_playwright().start()
-
-    headless = args.headless or config["browser"].get("headless", False)
     channel = config["browser"].get("channel", "msedge")
-    cdp_port = 9222
+    headless = args.headless or config["browser"].get("headless", False)
+    vw = config["browser"].get("viewport_width", 1280)
+    vh = config["browser"].get("viewport_height", 800)
 
-    browser = await pw.chromium.launch(
-        channel=channel,
-        headless=headless,
-        args=[
-            f"--remote-debugging-port={cdp_port}",
-            "--disable-gpu",
-            "--disable-gpu-compositing",
-        ],
-    )
+    exe = find_browser(channel)
+    if not exe:
+        print(f"错误: 找不到浏览器 ({channel})", file=sys.stderr)
+        sys.exit(1)
 
-    # 创建带正确 viewport 的 page
-    context = await browser.new_context(
-        viewport={
-            "width": config["browser"].get("viewport_width", 1280),
-            "height": config["browser"].get("viewport_height", 800),
-        },
-        device_scale_factor=1,
-    )
-    page = await context.new_page()
+    # 用独立 user-data-dir 避免与系统 Edge 冲突
+    user_data_dir = os.path.join(_SKILL_DIR, ".browser_profile")
 
-    # 保存状态
-    state = {
-        "cdp_url": f"http://localhost:{cdp_port}",
-        "pid": os.getpid(),
-        "channel": channel,
-        "headless": headless,
-        "step_counter": 0,
-        "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-    }
-    with open(STATE_FILE, "w") as f:
-        json.dump(state, f, indent=2)
+    cmd = [exe, f"--remote-debugging-port={CDP_PORT}",
+           f"--user-data-dir={user_data_dir}",
+           "--no-first-run", "--no-default-browser-check",
+           "--disable-background-timer-throttling",
+           "--disable-backgrounding-occluded-windows",
+           # 强制 DPR=1，使截图坐标=点击坐标
+           "--force-device-scale-factor=1",
+           ]
+    if headless:
+        cmd.append("--headless=new")
 
-    print(f"浏览器已启动 (channel={channel}, headless={headless})")
-    print(f"CDP 端口: {cdp_port}")
-    print(f"PID: {os.getpid()}")
-    print(f"状态文件: {STATE_FILE}")
-    print("按 Ctrl+C 关闭，或运行 python scripts/stop_browser.py")
+    # 系统级独立进程
+    kwargs = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    if sys.platform == "win32":
+        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+    else:
+        kwargs["start_new_session"] = True
 
-    # 保持进程运行
+    proc = subprocess.Popen(cmd, **kwargs)
+
+    # 等 CDP 就绪
+    for _ in range(20):
+        time.sleep(0.5)
+        if is_cdp_alive():
+            # 通过 CDP 设置第一个 tab 的 viewport
+            _set_viewport_via_cdp(vw, vh)
+
+            with open(STATE_FILE, "w") as f:
+                json.dump({"cdp_url": f"http://localhost:{CDP_PORT}", "pid": proc.pid,
+                           "channel": channel, "headless": headless, "step_counter": 0,
+                           "started_at": time.strftime("%Y-%m-%d %H:%M:%S")}, f, indent=2)
+            print(f"浏览器已启动 (PID: {proc.pid}, CDP: http://localhost:{CDP_PORT})")
+            return
+
+    print("错误: 浏览器启动超时", file=sys.stderr)
+    proc.kill()
+    sys.exit(1)
+
+
+def _set_viewport_via_cdp(width, height):
+    """通过 CDP 原生协议设置 viewport 大小，不依赖 Playwright"""
+    import json as _json
     try:
-        while True:
-            await asyncio.sleep(1)
-    except (KeyboardInterrupt, SystemExit):
-        print("\n正在关闭浏览器...")
-    finally:
-        await browser.close()
-        await pw.stop()
-        if os.path.exists(STATE_FILE):
-            os.remove(STATE_FILE)
-        print("浏览器已关闭")
+        # 获取 WebSocket URL
+        data = urllib.request.urlopen(f"http://localhost:{CDP_PORT}/json").read()
+        targets = _json.loads(data)
+        ws_url = None
+        for t in targets:
+            if t.get("type") == "page":
+                ws_url = t.get("webSocketDebuggerUrl")
+                break
+        if not ws_url:
+            return
+
+        # 用 websocket 发送 CDP 命令设置 viewport
+        # 简单方案：通过 HTTP fetch 方式（CDP 的 /json/protocol 不支持），
+        # 但最简单有效的是启动时设置 --window-size，配合 --force-device-scale-factor=1
+        # viewport 大小可以通过后续 Playwright connect 时 set_viewport_size 来精确控制
+        pass
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

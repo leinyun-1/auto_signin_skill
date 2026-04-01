@@ -1,1 +1,5 @@
 config.json
+state.json
+screenshots/
+.browser_profile/
+__pycache__/
